@@ -1,0 +1,205 @@
+---
+title: "HW1"
+author: "Seungjun Lee"
+date: '2022 9 29 '
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list=ls())
+
+setwd("C:/Users/user/Desktop/jun/SpatioTemp")
+library(sp)
+library(gstat)
+library(fields)
+library(classInt)
+library(maps)
+```
+
+## 1-(a)
+As we know, linear transformation of multivariate normal distribution is also multivariate normal distribution.
+The mean and variance are as follow.  
+  
+  
+$$ E(Y) = \mu + L*E[Z] = \mu   $$
+$$ Var(Y) = LVar(Z)L^T = LL^T = \Sigma  $$
+  
+  
+## 1-(b)
+  
+```{r }
+# 1-(b)
+
+sim_y = function(mu,sigma){
+  L =t(chol(sigma)) # lower triangle matrix
+  n = length(mu)
+  Z = rnorm(n,0,1)
+  Y = mu + L%*%Z
+  return(Y)
+}
+```
+   
+## 1-(c)
+We consider an exponential covariance function. 
+  
+$$C(h) = \sigma^2 \exp(-\|h\| / \rho)$$
+
+  
+
+```{r , echo=FALSE}
+x = seq(0, 1, length = 500) # fine grid
+d = as.matrix(dist(x)) # create distance matrix
+
+# We consider an exponential cov function.
+par(mfrow=c(1,3))
+
+sigma1 <- 10*exp(-d/0.5) # cov matrix
+samp1 = sim_y(mu=rep(0,500),sigma1)
+samp2 = sim_y(mu=rep(0,500),sigma1)
+samp3 = sim_y(mu=rep(0,500),sigma1)
+samples1= cbind(samp1,samp2,samp3)
+matplot(x, samples1, type = "l",main = expression(rho*"=0.5"))
+
+
+sigma2 <- 10*exp(-d/10) # cov matrix
+samp1 = sim_y(mu=rep(0,500),sigma2)
+samp2 = sim_y(mu=rep(0,500),sigma2)
+samp3 = sim_y(mu=rep(0,500),sigma2)
+samples2= cbind(samp1,samp2,samp3)
+matplot(x, samples2, type = "l",main = expression(rho*"=10"))
+
+samp1 = sim_y(mu=rep(0,500),sigma2)
+samp2 = sim_y(mu=rep(3,500),sigma2)
+samp3 = sim_y(mu=rep(5,500),sigma2)
+samples2= cbind(samp1,samp2,samp3)
+matplot(x, samples2, type = "l",main = expression(mu*"=0"*", "*mu*"=3"*", "*mu*"=5"))
+
+```
+  
+  
+## 2-(a)   
+  
+
+```{r}
+load("C:/Users/user/Desktop/jun/SpatioTemp/hw1/CAtemps.RData")
+
+
+head(CAtemp)
+
+data = data.frame(cbind(coordinates(CAtemp),CAtemp$avgtemp,CAtemp$elevation))
+sum(is.na(data)) # no missing data
+
+colnames(data) = c("lon","lat","avgtemp","elevation")
+fit = lm(avgtemp ~ lon + lat + elevation, data=data)
+# summary(fit)
+coeff = fit$coefficients  # answer 
+res = data$avgtemp - fit$fitted.values
+coeff
+
+
+
+```
+
+```{r}
+# plot.point.ref(CAtemp, res)
+
+
+ploteqc <- function(spobj, z, breaks, ...){
+  pal <- tim.colors(length(breaks)-1)
+  fb <- classIntervals(z, n = length(pal), 
+                       style = "fixed", fixedBreaks = breaks)
+  col <- findColours(fb, pal)
+  plot(spobj, col = col, ...)
+  image.plot(legend.only = TRUE, zlim = range(breaks), col = pal)
+}
+
+range(res)
+breaks = seq(-7, 7, length.out = 10)
+ploteqc(CAtemp, res, breaks, pch = 19) # answer
+map("county", region = "california", add = TRUE)
+title(main = "Average Annual Temperatures, 1961-1990, Degrees F")
+```
+     
+
+## 2-(b)   
+  
+```{r}
+CAtemp$res = res
+
+vg = variogram(res ~ 1, data = CAtemp, width=40)
+plot(vg, xlab = "Distance", ylab = "Semi-variogram estimate", width=5) 
+
+
+# vgangle = variogram(res ~ 1, data = CAtemp, alpha = c(0, 45, 90, 135))
+# plot(vgangle, xlab = "Distance", ylab = "Semi-variogram estimate")
+# # I think there are no big differences..
+
+vgmodel = vgm(1, "Exp", 200, 0.05)
+fitvg = fit.variogram(vg, vgmodel)
+plot(vg, fitvg, xlab = "Distance", ylab = "Semi-variogram estimate")
+
+
+print(fitvg)
+s2.hat = fitvg$psill[2]
+rho.hat = fitvg$range[2]
+tau2.hat = fitvg$psill[1]
+```
+   
+## 2-(c)
+   
+```{r}
+# 2-(c)
+head(data)
+data2 = cbind(coordinates(CAtemp),CAtemp$elevation) 
+colnames(data2) = c("lon","lat","elevation")
+X = as.matrix(cbind(1,data2))
+
+dist = rdist.earth(coordinates(CAtemp))
+covmat = exp(-dist/rho.hat)*s2.hat
+diag(covmat) = s2.hat
+nugget = diag(nrow(dist))*tau2.hat
+Sigma = covmat + nugget
+Sigma_inv = solve(covmat + nugget)
+y = CAtemp$avgtemp
+beta_gls = solve(t(X)%*% Sigma_inv %*% X) %*% t(X) %*% Sigma_inv %*% y
+
+rownames(beta_gls)[1] = "intercept"
+beta_gls # answer
+```
+
+
+  
+## 2-(d)   
+   
+
+```{r}
+#2-(d)
+dd = rdist.earth(coordinates(CAtemp),coordinates(CAgrid))
+gamma = s2.hat * exp(-dd/rho.hat) 
+Xs = cbind(1,coordinates(CAgrid),CAgrid$elevation)
+
+ypred = Xs %*% beta_gls + t(gamma) %*% solve(Sigma) %*%(y - X %*% beta_gls)
+
+range(ypred)
+breaks = seq(30, 75, length.out = 10)
+ploteqc(CAgrid, ypred, breaks, pch = 19) # answer
+map("county", region = "california", add = TRUE)
+points(coordinates(CAtemp),pch=4,cex=1)
+title(main = "Mean estimate")
+
+
+b = t(Xs) - t(X) %*% solve(Sigma) %*% gamma
+vpred = s2.hat - diag(t(gamma) %*% Sigma_inv%*%gamma + t(b) %*% solve(t(X) %*% Sigma_inv %*% X ) %*% b)
+
+
+sepred = sqrt(vpred)
+
+range(sepred)
+breaks = seq(range(sepred)[1],range(sepred)[2], length.out = 10)
+ploteqc(CAgrid, sepred, breaks, pch = 19) # answer
+map("county", region = "california", add = TRUE)
+points(coordinates(CAtemp),pch=4,cex=1)
+title(main = "Standard Error")
+```
+
