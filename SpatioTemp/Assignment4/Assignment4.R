@@ -12,7 +12,7 @@ library(spatstat)
 library(fields)
 library(mvtnorm)
 
-# Inner sampler
+# Propose a point uniformly in the circle domain.
 unif_circle = function(center=c(500,500),rad=radius){
   r = rad * sqrt(runif(1))
   theta = runif(1) * 2 * pi
@@ -21,7 +21,7 @@ unif_circle = function(center=c(500,500),rad=radius){
   return(c(x,y))
 }
 
-# solution for r1 r2 solving two equations (see Goldstein et al, 2015)#
+# solution for r1 r2 solving two equations (see Goldstein et al, 2015)
 solving_r = function(th1=1.5,th2=10,th3=0.5,R=0){
   a = (th2 - R)^2 / (th1*th3^2)
   b = th3^2*(th1 - 1)
@@ -38,7 +38,7 @@ r = solving_r(th1=1.5,th2=10,th3=0.5)
 r1 = r$r1
 r2 =r $r2
 
-# correlation function 
+# correlation function using the distance.
 phi_r = function(th1=1.5,th2=10,th3=0.5,R=0,r,r1,r2){ # R=0 is default in this problem.
   
   result = 0 + (r>100)*1 + ((r>r1) & (r<=100))*(1 + 1/( th3*(r-r2) )^2) + 
@@ -51,7 +51,7 @@ plot(x,phi_r(r=x,r1=r1,r2=r2),type="l")
 
 phi_r(r=0,r1=r1,r2=r2)
 
-# numerator of likelihood function. 
+# numerator of likelihood function. = log(h(X|theta))
 logh_fn = function(lamb=4e-4,th1=1.5,th2=10,th3=0.5,k=1.2,R=0,samples,r1,r2){ # assume k =1.2 
   
   n = length(samples)
@@ -64,11 +64,10 @@ logh_fn = function(lamb=4e-4,th1=1.5,th2=10,th3=0.5,k=1.2,R=0,samples,r1,r2){ # 
 }
 
 
-
+# used in Birth and Death MCMC
 d_fn = function(samples){
   return(1/(length(samples)))
 }
-
 
 # For death part of the Birth and Death MCMC.
 # birth part is nested in the Inner_sampler function.
@@ -80,12 +79,12 @@ delete_sample = function(samples){
 
 del_samples = delete_sample(samples=samples)
 
-
+# Birth and Death MCMC function; return the length list and final samples.
 Inner_sampler =function(p1=0.3,radius=337.5,iter=10,lamb=4e-4,th1=1.5,th2=10,th3=0.5,k=1.2,R=0,samples,r1,r2){
   len_lst = rep(NA,iter)
   b_fn = 1/(pi*(radius^2))
-
-            
+  
+  
   for(i in 1:iter){
     u = runif(n=1,min=0,max=1)
     
@@ -96,12 +95,12 @@ Inner_sampler =function(p1=0.3,radius=337.5,iter=10,lamb=4e-4,th1=1.5,th2=10,th3
       
       add_samples = samples
       add_samples[[length(samples)+1]] = unif_circle(rad=radius)
-  
+      
       add_ratio = (log((1-p1)) + logh_fn(lamb=lamb,th1=th1,th2=th2,th3=th3,k=k,R=R,samples=add_samples,r1=r1,r2=r2)
                    + log(d_fn(samples=add_samples)) 
                    -log(p1)    - logh_fn(lamb=lamb,th1=th1,th2=th2,th3=th3,k=k,R=R,samples=samples,r1=r1,r2=r2)
                    - log(b_fn) )
-
+      
       if( log(v1) < add_ratio){
         samples = add_samples
       }
@@ -112,12 +111,12 @@ Inner_sampler =function(p1=0.3,radius=337.5,iter=10,lamb=4e-4,th1=1.5,th2=10,th3
       
       v2 = runif(1)
       del_samples = delete_sample(samples=samples)
-
+      
       del_ratio = (log((p1))    + logh_fn(lamb=lamb,th1=th1,th2=th2,th3=th3,k=k,R=R,samples=del_samples,r1=r1,r2=r2) 
                    + log(b_fn)
                    -log(1-p1)    - logh_fn(lamb=lamb,th1=th1,th2=th2,th3=th3,k=k,R=R,samples=samples,r1=r1,r2=r2)
                    - log(d_fn(samples=samples))  )
-
+      
       
       if( log(v2) < del_ratio){
         samples = del_samples
@@ -143,7 +142,7 @@ for(i in 1:X$n){
 }
 
 # Simulation
-res1 = Inner_sampler(p1=0.3,radius=337.5,iter=2000,lamb=4e-4,th1=1.5,th2=10,th3=0.5,k=1.2,R=0,samples,r1,r2)
+res1 = Inner_sampler(p1=0.3,radius=337.5,iter=10000,lamb=4e-4,th1=1.5,th2=10,th3=0.5,k=1.2,R=0,samples,r1,r2)
 
 # convert from list to vector
 x_coords=c()
@@ -161,7 +160,9 @@ plot(x_coords,y_coords,xlim=c(-0,1000),ylim=c(0,1000))
 polygon(500+x,500+y)
 
 # trace plot of n
-ts.plot(res1$len_lst)
+png(filename="hw4_1.png",width=600,height=600)
+ts.plot(res1$len_lst,xlab="Iteration",ylab="The number of points",main="Trace plot of the number of points")
+dev.off()
 # pcf plot
 samples_ppp = ppp(x_coords,y_coords,window=disc(radius=377.5,centre=c(500,500)))
 samples_pcf = pcf(samples_ppp)
@@ -211,6 +212,7 @@ for(i in 1:nrow(X)){
   X_pattern[[i]] = X[i,]
 }
 
+# Proposal distribution for DMH.
 proposal = function(curr_ths,step_size){
   condition = FALSE
   while(!condition){
@@ -221,7 +223,7 @@ proposal = function(curr_ths,step_size){
   return(next_ths)
 }
 
-
+# Double Metropolis Hastings(DMH) function.
 outer_sampler = function(out_iter=10,inner_iter=2000,obs=X_pattern){
   theta_lst = matrix(NA,ncol=4,nrow=out_iter)
   # init 
@@ -251,7 +253,7 @@ outer_sampler = function(out_iter=10,inner_iter=2000,obs=X_pattern){
     Y_info = Inner_sampler(p1=0.5,radius=337.5,iter=inner_iter,lamb=next_ths[1],th1=next_ths[2],th2=next_ths[3],th3=next_ths[4],
                            k=1.2,R=0,samples=X_pattern,r1=next_r1,r2=next_r2)
     Y = Y_info$samples
-
+    
     log_acc = logh_fn(lamb=next_ths[1],th1=next_ths[2],th2=next_ths[3],th3=next_ths[4],k=1.2,R=0,samples=obs,r1=next_r1,r2=next_r2) +
       logh_fn(lamb=curr_ths[1],th1=curr_ths[2],th2=curr_ths[3],th3=curr_ths[4],k=1.2,R=0,samples=Y,r1=curr_r1,r2=curr_r2) - 
       logh_fn(lamb=curr_ths[1],th1=curr_ths[2],th2=curr_ths[3],th3=curr_ths[4],k=1.2,R=0,samples=obs,r1=curr_r1,r2=curr_r2) - 
@@ -269,20 +271,24 @@ outer_sampler = function(out_iter=10,inner_iter=2000,obs=X_pattern){
   }
   return(theta_lst)
 }
-out_res = outer_sampler(out_iter=1000,inner_iter=2000,obs=X_pattern)
-save(out_res,"DMH_sample.RData")
+out_res = outer_sampler(out_iter=2000,inner_iter=2000,obs=X_pattern)
+save(out_res,file="DMH_sample.RData")
 
-logh_fn(lamb=curr_ths[1],th1=curr_ths[2],th2=curr_ths[3],th3=curr_ths[4],k=1.2,R=0,samples=Y,r1=r1,r2=r2)
+out_res
+
+#png(filename="hw4_traceplot.png",width=600,height=600)
+ts.plot(out_res[,1],xlab="Iteration",ylab="Theta",main="Trace plot of parameters")
+ts.plot(out_res[,2],xlab="Iteration",ylab="Theta",main="Trace plot of parameters")
+ts.plot(out_res,xlab="Iteration",ylab="Theta",main="Trace plot of parameters",col=c(1,2,3,4),lty=c(1,2,3,4),lwd=1.5)
+legend("bottomleft",fill=c(1,2,3,4),col=c(1,2,3,4),legend=c("A","B","C","D"))
+#dev.off()
+
+theta1 = out_res[,1]
+sum(diff(theta1) !=0)/length(theta1) # acc rate
+apply(out_res,2,mean) # posterior mean
+apply(out_res,2,quantile,probs=c(0.025,0.975)) # 95% HPD interval
 
 
-# numerator of likelihood function. 
-logh_fn = function(lamb=4e-4,th1=1.5,th2=10,th3=0.5,k=1.2,R=0,samples,r1,r2){ # assume k =1.2 
-  
-  n = length(samples)
-  samples = matrix(unlist(samples),ncol=2,byrow=TRUE)
-  rr = rdist(samples)
-  res = n*log(lamb)
-  temp =  phi_r(th1=th1,th2=th2,th3=th3,R=R,r=rr,r1=r1,r2=r2) + diag(nrow(samples))
-  res = res + sum(pmin(k,rowSums(log(temp))))
-  return(res)
-}
+
+
+
