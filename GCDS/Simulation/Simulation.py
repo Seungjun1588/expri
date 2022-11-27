@@ -1,0 +1,576 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[1]:
+
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torchvision.utils as utils
+import torchvision.datasets as dsets
+from torchvision import datasets
+from torch.utils.data import Dataset
+import torchvision.transforms as transforms
+from torchvision.utils import save_image
+
+import os
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+
+# ## load the dataset 
+
+# In[2]:
+
+
+data = pd.read_csv("Simulation_data.csv")
+
+
+# In[3]:
+
+
+data.head()
+
+
+# In[4]:
+
+
+data.shape
+
+
+# In[5]:
+
+
+def imshow(img):
+    img = (img+1) / 2
+    img = img.squeeze() # 차원 중 사이즈 1 을 제거
+    np_img = img.numpy() # 이미지 픽셀을 넘파이 배열로 변환
+    plt.imshow(np_img)
+    plt.show()
+
+
+# In[ ]:
+
+
+# for i in range(30):
+#     plt.imshow(data.iloc[i,].to_numpy().reshape((30,30)))
+#     plt.show()
+
+
+# ## data preprocessing
+
+# In[8]:
+
+
+# place holder
+dataset = torch.zeros([435,2,900])
+lag_lst = torch.zeros([435])
+
+
+# In[9]:
+
+
+# all possible pairs of idices
+idx_list = range(30)
+pair = [(a, b) for idx, a in enumerate(idx_list) for b in idx_list[idx + 1:]]
+
+
+# In[10]:
+
+
+for i in range(len(pair)): 
+    idx1 = pair[i][0]
+    idx2 = pair[i][1]
+    lag = idx2-idx1
+    
+    dataset[i,0,:] = torch.tensor(data.iloc[idx1,].values)
+    dataset[i,1,:] = torch.tensor(data.iloc[idx2,].values)
+    lag_lst[i] = (lag)
+    
+
+
+# done; dataset and lag_lst
+
+# In[15]:
+
+
+print(dataset[0,0,:].min())
+print(dataset[0,0,:].max())
+
+
+# In[ ]:
+
+
+
+
+
+# In[22]:
+
+
+dataset = (dataset - dataset.min())/(dataset.max()- dataset.min())
+
+print(dataset.min())
+print(dataset.max())
+
+
+# In[24]:
+
+
+dataset = ((dataset - 0.5)/0.5)
+
+print(dataset.min())
+print(dataset.max())
+
+
+# scaled dataset in [-1,1]
+
+# ## Data loader
+
+# 나중에 모델만 짜는 파일을 만들어서 import 하는 형태로 구성하자 -> training 하는 과정을 함수로 만들어야 의미가 있을 듯 하다. 
+# 
+
+# In[96]:
+
+
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+print(f"device = {device}")
+sample_dir = 'samples'
+if not os.path.exists(sample_dir):
+    os.makedirs(sample_dir)
+
+
+# X를 이미지 2개를 받아서 만드는 것으로, y는 label을 받는 대신 lag를 받는 것으로 변경
+
+# In[25]:
+
+
+class CustomImageDataset(Dataset):
+    def __init__(self,X,Y):
+        self.X = X
+        self.Y = Y
+        
+    def __len__(self):
+        return len(self.X)
+
+    def __getitem__(self, idx):
+        X = self.X
+        Y = self.Y
+        return X[idx], Y[idx]
+
+
+# In[182]:
+
+
+dataset = dataset.resize(435,2,30,30)
+
+
+# In[183]:
+
+
+trainset = CustomImageDataset(dataset,lag_lst)
+
+
+# In[185]:
+
+
+print(trainset.__getitem__(1)[0][0].size())
+print(trainset.__getitem__(1)[1])
+
+
+# In[186]:
+
+
+plt.imshow(trainset.__getitem__(1)[0][0].numpy())
+plt.show()
+
+
+# In[187]:
+
+
+plt.imshow(trainset.__getitem__(1)[0][1].numpy())
+plt.show()
+
+
+# In[188]:
+
+
+batch_size= 50
+
+
+# In[189]:
+
+
+# data loader
+data_loader = torch.utils.data.DataLoader(dataset=trainset, 
+                                          batch_size=batch_size,
+                                          shuffle=True) 
+
+
+# In[190]:
+
+
+for X,Y in data_loader:
+    print(X.size())
+    print(Y.size())
+    
+
+
+# ### Model construction
+
+# In[206]:
+
+
+# Channel changed
+class Discriminator(nn.Module):
+    def __init__(self):
+        super(Discriminator, self).__init__()
+        self.D1 = nn.Sequential(
+            nn.Conv2d(1,64,5,2,padding=1), 
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(64,128,4,1,padding=1), 
+            nn.BatchNorm2d(128),
+            nn.LeakyReLU(0.2),
+            nn.Flatten(1)
+            )
+        self.D2 = nn.Sequential(
+            nn.Conv2d(1,32,5,2,padding=1), 
+            nn.BatchNorm2d(32),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(32,64,5,2,padding=1),
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU(0.2),
+            nn.Flatten(1) 
+            )
+        self.D3 = nn.Sequential(
+            nn.Linear(23936,128), 
+            nn.BatchNorm1d(128),
+            nn.LeakyReLU(0.2),
+            nn.Linear(128,64),
+            nn.BatchNorm1d(64),
+            nn.LeakyReLU(0.2),
+            nn.Linear(64,1) # [100, 1]
+            )
+    def forward(self,X,Y):
+        disc_X = self.D1(X)
+        disc_Y = self.D2(Y)
+        Dout1 = torch.concat((disc_X,disc_Y),1)
+        Dout2 = self.D3(Dout1)
+        
+        return Dout2
+
+
+# In[207]:
+
+
+for X,Y in data_loader:
+    disc_X = X[:,0,:].reshape(batch_size,1,30,30)
+    disc_Y = X[:,1,:].reshape(batch_size,1,30,30)
+    break
+    
+
+
+# In[208]:
+
+
+disc_X.size()
+
+
+# In[209]:
+
+
+disc_Y.size()
+
+
+# In[210]:
+
+
+# Discriminator check
+D = Discriminator().to(device)
+out = D(disc_X.to(device),disc_Y.to(device))
+
+print(out.size())
+print(out.device)
+
+
+# In[195]:
+
+
+plt.imshow(disc_X[1].squeeze().numpy())
+plt.show()
+
+
+# In[ ]:
+
+
+
+
+
+# In[153]:
+
+
+class Generator(nn.Module):
+    def __init__(self):
+        super(Generator, self).__init__()
+        self.G1 = nn.Sequential(
+            nn.Flatten(1), # 
+            nn.Linear(900, 128), # 100*128
+            nn.BatchNorm1d(128), # 100*128
+            nn.LeakyReLU(0.2)) # 100*128
+
+        self.G2 = nn.Sequential(
+            nn.ConvTranspose2d(228,256,kernel_size=(7,7),stride=(1,1),padding=0), # [100, 256, 7, 7]
+            nn.BatchNorm2d(256), # 
+            nn.LeakyReLU(0.2), # [100, 256, 7, 7]
+            nn.ConvTranspose2d(256,128,kernel_size=(7,7),stride=(1,1)), # [100, 128, 14, 14]
+            nn.BatchNorm2d(128), # 
+            nn.LeakyReLU(0.2),#
+            nn.ConvTranspose2d(128,1,kernel_size=(6,6),stride=(2,2)), # [100, 1, 14, 14] -> should be matched with size of y.
+            nn.Tanh()# [100, 1, 14, 14]
+            )
+
+    def forward(self,X,eta_dist="Normal",eta_dim=100,device=device):
+        # random error part
+        if eta_dist == "Normal":
+            eta = torch.randn(X.size()[0], eta_dim, device=device) # X.size()[0] :batch_size
+
+        elif eta_dist == "Unif":
+            eta = torch.rand(X.size()[0], eta_dim, device=device)
+
+        else :
+            raise Exception("Please specify the correct distribution. Normal or Unif")
+
+        # construcnt the full model
+        Gout1 = self.G1(X)
+        Gout2 = torch.concat((Gout1,eta),1).resize(X.size()[0],(128 + eta_dim),1,1)
+        Gout3 = self.G2(Gout2)
+    
+        return Gout3
+
+
+# In[196]:
+
+
+# Generator check
+
+print(disc_X.size())
+G = Generator().to(device)
+out = G(X=disc_X.to(device),eta_dist="Normal",eta_dim=100)
+print(out.size())
+print(out.device)
+
+
+# In[197]:
+
+
+# visualizing the generator image
+
+rand = torch.randn(2,1, 30,30, device=device)
+img_1 = G(rand)[0] # 범위가 [-1,1]임을 감안
+imshow(img_1.squeeze().cpu().detach())
+
+
+# ### Loss function
+
+# In[213]:
+
+
+# Defince the fenchel conjugacy loss 
+
+# def disc_loss(output,label): # label : 1 for real, -1 for fake
+#     loss = - torch.mean( output * (label - 1.) * (-1.0/2.0) - torch.exp(output) * (label + 1.) * (1.0/2.0) )
+#     return loss
+
+def disc_loss(output,label): # label : 1 for real, -1 for fake
+    loss = - torch.mean( output * (label + 1.) * (1.0/2.0) - torch.exp(output) * (label - 1.) * (-1.0/2.0) )
+    return loss
+
+def gen_loss(output,label): # all labels are -1.(all fake data)
+    loss = torch.mean(output)
+    return loss
+
+
+# ### Visualizing tool for the results
+
+# In[198]:
+
+
+train_X = dataset[:,0,:].unsqueeze(1)
+train_Y = dataset[:,1,:].unsqueeze(1)
+print(train_X.size())
+
+
+# In[309]:
+
+
+# making plots 
+
+    
+def imshow_sub(img,ax,i,j):
+    img = (img+1) / 2
+    img = img.squeeze() # 차원 중 사이즈 1 을 제거
+    np_img = img.numpy() # 이미지 픽셀을 넘파이 배열로 변환
+    ax[i,j].imshow(np_img)
+    ax[i,j].axis('off')
+
+def making_plots(X=train_X,Y=train_Y,lag=lag_lst,device=device,G=G,sample_idx = [1,10,8,30,20,100],rep=5):
+    sample_batch = X[sample_idx].clone()
+    sample_batch = (sample_batch*0.5 + 0.5)
+
+    # X,Y를 같이 나열 
+    fig, ax = plt.subplots(len(sample_idx),rep + 2, figsize=(15,15))
+
+    for i in range(len(sample_idx)):
+        for j in range(rep + 2):
+            if j == 0:
+                imshow_sub(train_X[i].detach(),ax,i,j)
+                ax[i,j].set_title("lag= " + str(int(lag_lst[sample_idx[i]].item())))
+            elif j==1:
+                imshow_sub(train_Y[i].detach(),ax,i,j)
+                ax[i,j].axis('off')
+            else:
+                res_y_tilde = G(sample_batch.to(device))
+                imshow_sub(res_y_tilde[i].detach().cpu(),ax,i,j)
+                ax[i,j].axis('off')
+    plt.show()
+
+
+# In[311]:
+
+
+making_plots(X=train_X,Y=train_Y,device=device,G=G,sample_idx = [1,27,28,29,30,56,65,90,103])
+
+
+# ### Training
+
+# In[204]:
+
+
+num_epochs = 2500
+
+
+# In[ ]:
+
+
+# training
+
+real_scores = []
+fake_scores = []
+gloss_lst = []
+dloss_lst = [] 
+
+total_step = len(data_loader)
+D = Discriminator().to(device)
+G = Generator().to(device)
+
+d_optimizer = torch.optim.Adam(D.parameters(), lr=0.00001)
+g_optimizer = torch.optim.Adam(G.parameters(), lr=0.0002)
+
+for epoch in range(num_epochs):
+    for i, (XY,lag) in enumerate(data_loader):
+        X = XY[:,0,:].to(device).unsqueeze(1)
+        Y = XY[:,1,:].to(device).unsqueeze(1)
+        
+        # Create the labels which are later used as input for loss function
+        real_labels = -torch.ones(len(XY), 1).to(device)
+        fake_labels = torch.ones(len(XY), 1).to(device)
+
+        # ================================================================== #
+        #                      Train the discriminator                       #
+        # ================================================================== #
+
+        # Compute Loss using real images where custom_loss(x, y)
+        
+        Dout = D(X,Y)
+        d_loss_real = disc_loss(Dout,real_labels)
+        real_score = Dout
+        
+        # Compute Loss using fake images
+        
+        Gout = G(X,eta_dist="Normal",eta_dim=100)
+        DGout = D(X,Gout)
+        d_loss_fake = disc_loss(DGout, fake_labels)
+        
+        # Backprop and optimize
+        d_loss = d_loss_real + d_loss_fake
+        d_optimizer.zero_grad()
+        d_loss.backward(retain_graph=True)
+        d_optimizer.step()
+        
+        # ================================================================== #
+        #                        Train the generator                         #
+        # ================================================================== #
+    
+        # Compute loss with fake images
+        DGout2 = D(X,Gout)  # G(X,eta_dist="Normal",eta_dim=200)
+        fake_score = DGout2
+
+        # Backprop and optimize
+        g_loss = gen_loss(DGout2, -1)
+        g_optimizer.zero_grad()
+        g_loss.backward(retain_graph=True)
+        g_optimizer.step()
+        
+        
+    if (epoch) % 10 == 0:
+        print('Epoch [{}/{}], Step [{}/{}], d_loss: {:.4f}, g_loss: {:.4f}, D(x): {:.2f}, D(G(z)): {:.2f}' 
+              .format(epoch, num_epochs, i+1, total_step, d_loss.item(), g_loss.item(), 
+                      real_score.mean().item(), fake_score.mean().item()))
+        making_plots(X=train_X,Y=train_Y,device=device,G=G,sample_idx = [1,27,28,29,30,56,65,90,103])
+            
+    real_scores.append(real_score.mean().item())            
+    fake_scores.append(fake_score.mean().item())
+    gloss_lst.append(g_loss.item())
+    dloss_lst.append(d_loss.item())
+    
+    
+#     # real image 저장
+#     if (epoch+1) == 1:
+#         images = images.reshape(images.size(0), 1, 28, 28)
+#         save_image(denorm(images), os.path.join(sample_dir, 'real_images.png'))
+    
+#     # 생성된 이미지 저장
+#     fake_images = fake_images.reshape(fake_images.size(0), 1, 28, 28)
+#     save_image(denorm(fake_images), os.path.join(sample_dir, 'fake_images-{}.png'.format(epoch+1)))
+
+# 생성자, 판별자 각각 모델 저장
+torch.save(G.state_dict(), 'G.ckpt')
+torch.save(D.state_dict(), 'D.ckpt')
+
+
+# In[315]:
+
+
+# plot    
+plt.figure(figsize = (12, 8))
+plt.xlabel('epoch')
+plt.ylabel('loss')
+x = np.arange(num_epochs)  # num_epochs
+plt.plot(x, gloss_lst, 'g', label='generator loss')
+plt.plot(x, dloss_lst, 'b', label='discriminator loss')
+plt.title("loss plot")
+plt.legend()
+plt.show()
+
+
+# In[316]:
+
+
+# plot    
+plt.figure(figsize = (12, 8))
+plt.xlabel('epoch')
+plt.ylabel('score')
+x = np.arange(num_epochs)
+plt.plot(x, real_scores, 'g', label='D(x,y)')
+plt.plot(x, fake_scores, 'b', label='D(x,G(x,eta))')
+plt.legend()
+plt.show()
+
+
+# In[ ]:
+
+
+
+
