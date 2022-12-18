@@ -108,6 +108,8 @@ final_case1$memb = factor(dat20_case1[case1_cat][,2,drop=TRUE],labels=c(0,1)) # 
 
 head(final_case1)
 
+# NA 전부 그냥 제거한 데이터 (즉, 기존)
+final_case1_org = final_case1
 #--------------------------------------------------------------------#
 ## case 2 kotra
 idx_kotra = (dat20$memb == "회원")
@@ -185,6 +187,13 @@ final_case2_imp= tibble(data.frame(case2_imp$ximp))
 final_case2_imp$y = temp_case2$y
 summary(final_case2_imp)
 
+# NA 전부 그냥 제거한 데이터 (즉, 기존)
+temp1 = dat20_case2 %>% select(-c(itm1,itm2,itm4))
+final_case2_org = na.omit(temp1)
+final_case2_org$y = as.numeric(as.factor(final_case2_org$y)) -1
+final_case2_org$webp = as.numeric(final_case2_org$webp)
+dim(final_case2_org)
+str(final_case2_org)
 #--------------------------------------------------------------------#
 ## case 4 kotra_entp
 idx_entp = (dat20$entp_last>0) | (dat20$entp_curr>0)
@@ -258,8 +267,38 @@ summary(temp_case4)
 
 final_case4 = temp_case4
 final_case4_imp = tibble(final_case4)
+# NA 전부 그냥 제거한 데이터 (즉, 기존)
+
+temp1 = dat20_case4 %>% select(-c(itm1,itm2,itm4))
+final_case4_org = na.omit(temp1)
+str(final_case4_org)
+final_case4_org$y = as.numeric(as.factor(final_case4_org$y)) -1
+final_case4_org = final_case4_org %>% mutate_if(is.character,as.numeric)
+str(final_case4_org)
+dim(final_case4_org)
+
+
+#---------------------------------------------------------------------------#
+# factor 전부 numeric으로 변환...
+final_case1$y = as.numeric(final_case1$y) -1 
+final_case1$memb = as.numeric(final_case1$memb)-1
+
+str(final_case2_imp)
+final_case2_imp$y = as.numeric(final_case2_imp$y)-1
+
+
+str(final_case4_imp)
+final_case4_imp$y = as.numeric(final_case4_imp$y)-1
+final_case4_imp$webp = as.numeric(final_case4_imp$webp)
+final_case4_imp$ptcp_exp   = as.numeric(final_case4_imp$ptcp_exp  )
+final_case4_imp$ptcp_vch   = as.numeric(final_case4_imp$ptcp_vch  )
+final_case4_imp$ptcp_cnslt = as.numeric(final_case4_imp$ptcp_cnslt)
+final_case4_imp$ptcp_wc    = as.numeric(final_case4_imp$ptcp_wc   )
+final_case4_imp$ptcp_inq   = as.numeric(final_case4_imp$ptcp_inq  )
+final_case4_imp$ptcp_expo    = as.numeric(final_case4_imp$ptcp_expo   )
+final_case4_imp$ptcp_rgof    = as.numeric(final_case4_imp$ptcp_rgof   )
+final_case4_imp$ptcp_vdc     = as.numeric(final_case4_imp$ptcp_vdc    )
 
 save(final_case1,final_case2_imp,final_case4_imp,file="case_data.Rdata")
-
-
+save(final_case1_org,final_case2_org,final_case4_org,file="case_data_org.Rdata")
 

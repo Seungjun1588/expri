@@ -1,4 +1,5 @@
 getwd()
+load(file="case_data.Rdata")
 
 #case1
 num_up = table(final_case1$y)[2] - table(final_case1$y)[1]
