@@ -84,7 +84,6 @@ cvROC = function(X, Y){
   par(mfrow=c(1,1))
   out <- cvAUC::cvAUC(X, Y)
 
-  
   plot(out$perf, col = "grey82", lty = 3, 
                    main = paste0(length(X), "-fold CV ROC"))
   plot(out$perf, col ="red", avg = "vertical", add = TRUE)
@@ -96,7 +95,6 @@ cvROC = function(X, Y){
                         signif(tmp$ci[1], 4), " , ", 
                         signif(tmp$ci[2], 4)),
        font =2, adj = 0)
-  return(cutoffs)
 }
 
 
@@ -106,7 +104,7 @@ cvcutoff = function(pred,true,idx){
   
   predlabel = prediction(predprob,labels)
   perf = performance(predlabel,"acc")
-  if(idx ==1)  plot(perf,main="Acc plot",lty=2,col='gray',ylim=c(0,0.9))
+  if(idx ==1)  plot(perf,main="Acc plot",lty=2,col='gray',ylim=c(0,1))
   else plot(perf,main="Acc plot",add=T,lty=2,col='gray')
   
   yloc = max(perf@y.values[[1]])

@@ -134,7 +134,7 @@ make_dummies = function(dummy_mat,data){
   while(TRUE){# nrow(arncont20)
     if(i > nrow(data)) break
     if(start == data$ind[i]){
-      dummy_mat[start,colnames(dummy_mat) == data$cntt_name[i]] = data$amt[i]
+      dummy_mat[start,colnames(dummy_mat) == data$cntt_name[i]] = 1 # data$amt[i]
       i = i + 1
     }
     else{
@@ -462,10 +462,10 @@ final_case4_org_ind = final_case4_org %>% select(ind)
 final_case4_org = final_case4_org %>% select(-ind)
 
 #---------------------------------------------------------------------------#
-save(final_case1,final_case2_imp,final_case4_imp,file="data/case_data_imp.Rdata")
+save(final_case1,final_case2_imp,final_case4_imp,file="data/case_data_imp2.Rdata")
 
 save(final_case1_ind,final_case2_imp_ind,final_case4_imp_ind,file="data/case_data_imp_ind.Rdata")
-save(final_case1_org,final_case2_org,final_case4_org,file="data/case_data_org.Rdata")
+save(final_case1_org,final_case2_org,final_case4_org,file="data/case_data_org2.Rdata")
 
 
 
