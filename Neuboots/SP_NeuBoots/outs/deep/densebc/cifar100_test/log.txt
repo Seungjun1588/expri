@@ -1,0 +1,7 @@
+2023-05-02 16:55:23,421 - outs/deep/densebc/cifar100_test/log.txt - INFO - scripts/deep.yaml
+{'path': {'dataset': 'cifar100', 'postfix': 'test', 'model_path': 'outs/deep/densebc/cifar100_test'}, 'setup': {'model_type': 'deep', 'batch_size': 128, 'cpus': 4, 'gpus': '0', 'seed': 0, 'num_epoch': 2, 'phase': 'train', 'adv_training': True, 'index': -1, 'local_rank': 0, 'rank': 0, 'dist_size': 1}, 'module': {'model': {'name': 'densebc', 'num_classes': 100, 'dropout_rate': 0.0}, 'optim': {'name': 'SGD', 'lr': 0.1, 'momentum': 0.9, 'nesterov': True, 'weight_decay': 0.0005}, 'lr_scheduler': {'name': 'CosineAnnealingLR', 'T_max': 200}, 'loss': ['BrierLoss'], 'loss_args': {'BrierLoss': {'num_classes': 100, 'reduction': 'mean'}}, 'loss_weight': [1.0], 'val_metric': 'Accuracy', 'test_metric': 'Accuracy', 'metric_args': {'nlabels': 100, 'reduction': 'none'}}}
+2023-05-02 16:56:58,048 - outs/deep/densebc/cifar100_test/log.txt - INFO - [Train] epoch:0 loss:0.9861275795847178
+2023-05-02 16:57:08,470 - outs/deep/densebc/cifar100_test/log.txt - INFO - [Val] 0 Score: 0.044
+2023-05-02 16:58:29,438 - outs/deep/densebc/cifar100_test/log.txt - INFO - [Train] epoch:1 loss:0.977821332487193
+2023-05-02 16:58:40,067 - outs/deep/densebc/cifar100_test/log.txt - INFO - [Val] 1 Score: 0.067
+2023-05-02 16:58:50,421 - outs/deep/densebc/cifar100_test/log.txt - INFO - [Test] ACC: 6.64, ECE : 29.15, NLL : 42.85, Brier : 97.45
